@@ -1,0 +1,247 @@
+﻿@page "/Transportation";
+
+@using DataAccessLibrary
+@using DataAccessLibrary.Models
+@using BlazorDemoApp.Models
+
+@inject IJSRuntime JsRuntime;
+@inject ITransportationData _db
+ 
+
+    <div>
+        <div class="container">
+            <h2 class="py-2">Transportation overview</h2>
+            <div class="container">
+                <button class="btn btn-info" data-toggle="collapse" data-target="#register">Register</button>
+
+                <div id="register" class="collapse">
+                    <div class="container">
+                        <EditForm Model="@newTransportationModel" OnValidSubmit="@InsertTM">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+                            <h3 class="py-2">Register</h3>
+                            <div class="col-md-12">
+                                <label class="px-2">Company name</label><InputText id="companyName" @bind-Value="newTransportationModel.CompanyName" />
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="px-2">Transportation name</label><InputText id="transportationName" @bind-Value="newTransportationModel.TransportationName" />
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="px-2">Transportation Type:</label> <InputSelect @bind-Value="newTransportationModel.TransportationType">
+                                    <option value="Truck">Truck</option>
+                                    <option value="Train">Train</option>
+                                    <option value="Plane">Plane</option>
+                                    <option value="Trailer">Trailer</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="px-2">Transportation Characteristics</label><InputText id="transportationCharacteristics" @bind-Value="newTransportationModel.TransportationCharacteristics" />
+                            </div>
+
+                            <button type="submit" class="btn btn-primary">Register</button>
+
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row justify-content-end my-2">
+                <div class="col-md-2 align-self-end">
+                    <div class="btn-group">
+                        <button class="btn btn-info dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Sort list
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            @foreach (var sortingMethod in Enum.GetValues(typeof(FilterType)))
+                            {
+                                <button class="dropdown-item" @onclick="async e => { Filtertype = (FilterType)sortingMethod; await ApplyFilter((FilterType)sortingMethod); }">@sortingMethod.ToString()</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Company name</th>
+                        <th>Transportation name</th>
+                        <th>Type</th>
+                        <th>Transportation Characteristics</th>
+                        <th>Registered</th>
+                        <th>Edit</th>
+                        <th>Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (tp != null)
+                    {
+                        @foreach (var item in tp)
+                        {
+                            <tr>
+                                <td>@item.CompanyName</td>
+                                <td>@item.TransportationName</td>
+                                <td>@item.TransportationType</td>
+                                <td>@item.TransportationCharacteristics</td>
+                                <td>@item?.Registered.Value.ToString("d")</td>
+                                <td><button data-toggle="modal" class="btn btn-primary" data-target="#edit-@item.id-edit">Edit</button></td>
+                                <td><button data-toggle="modal" class="btn btn-secondary" @onclick="@(async () => await Delete(item.id))">Delete</button></td>
+                            </tr>
+
+
+                            <!-- The Modal -->
+                            <div class="modal fade" id="edit-@item.id-edit" tabindex="-1" role="dialog">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+
+                                        <!-- Modal Header -->
+                                        <div class="modal-header">
+                                            <h4 class="modal-title">Edit</h4>
+                                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                        </div>
+
+                                        <!-- Modal body -->
+                                        <div class="modal-body">
+                                            <h2>Id: @item.id</h2>
+                                            <h3>@item.CompanyName</h3>
+                                            <h4>@item.TransportationType</h4>
+                                            <label>Transportation name</label>
+                                            <input type="text" class="form-control" @bind-value="@editTM.TransportationName">
+                                            <label>Transportation Characteristics</label>
+                                            <input type="text" class="form-control" @bind-value="@editTM.TransportationCharacteristics">
+                                        </div>
+                                        @if (string.IsNullOrEmpty(@editTM.TransportationName))
+                                        {
+                                            editTM.TransportationName = item.TransportationName;
+                                        }
+                                        @if (string.IsNullOrEmpty(@editTM.TransportationCharacteristics))
+                                        {
+                                            editTM.TransportationCharacteristics = item.TransportationCharacteristics;
+                                        }
+                                        <!-- Modal footer -->
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                                            <button type="button" class="btn btn-success" data-dismiss="modal" @onclick="@(async () => await Edit(item.id, item.CompanyName, editTM.TransportationName, editTM.TransportationCharacteristics, item.TransportationType))">Update</button>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+
+
+
+                </tbody>
+            </table>
+
+        </div>
+
+
+
+
+
+    </div>
+
+
+@code {
+
+    private List<TransportationModel> tp;
+    private DisplayTransportationModel newTransportationModel = new DisplayTransportationModel();
+    private DisplayTransportationModel editTM = new DisplayTransportationModel();
+    public FilterType Filtertype { get; set; }
+
+
+    public bool ShowModal { get; set; } = false;
+
+    public enum FilterType
+    {
+        ORDER_BY_DATE,
+        ORDER_BY_NAME
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await _db.GetTransportationData();
+        if (result != null)
+        {
+            tp = result;
+        }
+    }
+
+    private async Task InsertTM()
+    {
+        TransportationModel t = new TransportationModel
+        {
+            CompanyName = newTransportationModel.CompanyName,
+            TransportationName = newTransportationModel.TransportationName ?? "",
+            TransportationCharacteristics = newTransportationModel.TransportationCharacteristics ?? "",
+            TransportationType = newTransportationModel.TransportationType ?? "",
+            Registered = DateTime.Now
+
+        };
+
+        tp.Add(t);
+        await _db.InsertTransportation(t);
+        newTransportationModel = new DisplayTransportationModel();
+
+        var result = await _db.GetTransportationData();
+        if (result != null)
+        {
+            tp = result;
+        }
+    }
+    private async Task Edit(int id, string cName, string tName, string tChar, string tType)
+    {
+        TransportationModel tm = new TransportationModel
+        {
+            id = id,
+            CompanyName = cName,
+            TransportationName = tName,
+            TransportationCharacteristics = tChar,
+            TransportationType = tType,
+            Registered = DateTime.Now
+
+        };
+
+        await _db.UpdateRowInDb(tm);
+        newTransportationModel = new DisplayTransportationModel();
+
+        var result = await _db.GetTransportationData();
+        if (result != null)
+        {
+            tp = result;
+        }
+    }
+    private async Task Delete(int id)
+    {
+
+        await _db.DeleteRowFromDb(id);
+
+        var result = await _db.GetTransportationData();
+        if (result != null)
+        {
+            tp = result;
+        }
+    }
+    private async Task ApplyFilter(FilterType filter)
+    {
+
+        var result = await _db.GetTransportationData();
+        if (result != null)
+        {
+            if(filter == FilterType.ORDER_BY_DATE)
+            {
+                tp = result.OrderByDescending(r => r.Registered).ToList();
+            }
+            if(filter == FilterType.ORDER_BY_NAME)
+            {
+                tp = result.OrderBy(cn => cn.CompanyName).ToList();
+            }
+
+        }
+    }
+
+}
